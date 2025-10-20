@@ -1,0 +1,15 @@
+
+START: E
+NONTERMINALS: E T F
+TERMINALS: id + * ( )
+PRODUCTIONS:
+  E -> E + T | T
+  T -> T * F | F
+  F -> ( E ) | id
+LEXER:
+  id:      /[a-zA-Z_]\w*/
+  '+':     /\+/
+  '*':     /\*/
+  '(':     /\(/
+  ')':     /\)/
+  WS:      /\s+/ skip
