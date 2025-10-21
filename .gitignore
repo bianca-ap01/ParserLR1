@@ -16,7 +16,7 @@ build/
 dist/
 
 # --- Salidas del proyecto ---
-lr1_project/outputs/
+lr1_app/backend/lr1_project/outputs/
 
 # --- Env / secretos ---
 *.env
