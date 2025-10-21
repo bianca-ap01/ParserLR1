@@ -1,6 +1,6 @@
 
 from pydantic import BaseModel
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Optional
 
 class GrammarRequest(BaseModel):
     text: str  # archivo de gramática estilo labs
@@ -13,20 +13,25 @@ class NFATransition(BaseModel):
     sym: str  # 'ε' para epsilon
     dst: int
 
-class NFAResponse(BaseModel):
-    states: List[int]
-    start: int
-    finals: List[int]
-    transitions: List[NFATransition]
-    eclosure: Dict[int, List[int]]
+class AutomatonSuccess(BaseModel):
+    states: List[Any]
+    start: Any
+    finals: List[Any]
+    transitions: Dict[Any, Dict[str, Any]]
+    image: Optional[str] = None  # base64 imagen PNG
 
-class DFAResponse(BaseModel):
-    states: List[str]
-    start: str
-    finals: List[str]
-    alphabet: List[str]
-    transitions: List[Dict[str, str]]
-    subset_table: List[Dict[str, Any]]
+class AutomatonError(BaseModel):
+    error: str
+
+class AutomatonBase(BaseModel):
+    success: Optional[AutomatonSuccess] = None
+    error: Optional[str] = None
+
+class NFAResponse(AutomatonBase):
+    pass
+
+class DFAResponse(AutomatonBase):
+    alphabet: Optional[List[str]] = None  # Solo presente en caso de éxito
 
 class LR1Response(BaseModel):
     action: Dict[str, Dict[str, str]]
@@ -34,3 +39,11 @@ class LR1Response(BaseModel):
     conflicts: List[Dict[str, Any]]
     states: List[Dict[str, Any]]
     transitions: List[Dict[str, Any]]
+    # Analysis fields
+    terminals: List[str]
+    nonterminals: List[str]
+    first: Dict[str, List[str]]
+    follow: Dict[str, List[str]]
+    grammar_augmented: List[str]  # Producciones de la gramática aumentada (strings)
+    nfa: Dict[str, AutomatonBase]  # AFN generado por cada terminal
+    dfa: Dict[str, AutomatonBase]  # AFD generado por cada terminal

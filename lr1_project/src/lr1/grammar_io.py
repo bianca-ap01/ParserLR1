@@ -30,43 +30,50 @@ def _strip_quotes(s: str) -> str:
 def load_grammar_file(path: str) -> Tuple[GrammarSpec, Grammar]:
     with open(path, 'r', encoding='utf-8') as f:
         lines = [ln.rstrip() for ln in f]
-
     current = None
     spec = GrammarSpec()
     prod_lines: List[str] = []
 
-    for raw in lines:
-        if not raw.strip():
-            continue
-        m = _SECTION_RE.match(raw)
-        if m:
-            current = m.group(1)
-            rest = m.group(2)
-            if current == 'START':
-                spec.start = rest.strip()
-            elif current == 'NONTERMINALS':
-                spec.nonterms = [t for t in rest.split() if t]
-            elif current == 'TERMINALS':
-                spec.terms = [t for t in rest.split() if t]
-            elif current == 'PRODUCTIONS':
-                prod_lines.clear()
-            elif current == 'LEXER':
-                pass
-            continue
+    saw_header = any(_SECTION_RE.match(ln) for ln in lines if ln.strip())
 
-        if current == 'PRODUCTIONS':
+    if not saw_header:
+        for raw in lines:
+            if not raw.strip():
+                continue
             prod_lines.append(raw.strip())
-        elif current == 'LEXER':
-            mm = _LEXER_LINE_RE.match(raw.strip())
-            if not mm:
-                raise ValueError(f"Línea de lexer inválida: {raw}")
-            name = mm.group(1).strip()
-            term = _strip_quotes(name)
-            regex = mm.group(2)
-            skip = bool(mm.group(3))
-            spec.lex_rules.append((term, regex, skip))
-        else:
-            raise ValueError(f"Línea fuera de sección: {raw}")
+    else:
+        for raw in lines:
+            if not raw.strip():
+                continue
+            m = _SECTION_RE.match(raw)
+            if m:
+                current = m.group(1)
+                rest = m.group(2)
+                if current == 'START':
+                    spec.start = rest.strip()
+                elif current == 'NONTERMINALS':
+                    spec.nonterms = [t for t in rest.split() if t]
+                elif current == 'TERMINALS':
+                    spec.terms = [t for t in rest.split() if t]
+                elif current == 'PRODUCTIONS':
+                    prod_lines.clear()
+                elif current == 'LEXER':
+                    pass
+                continue
+
+            if current == 'PRODUCTIONS':
+                prod_lines.append(raw.strip())
+            elif current == 'LEXER':
+                mm = _LEXER_LINE_RE.match(raw.strip())
+                if not mm:
+                    raise ValueError(f"Línea de lexer inválida: {raw}")
+                name = mm.group(1).strip()
+                term = _strip_quotes(name)
+                regex = mm.group(2)
+                skip = bool(mm.group(3))
+                spec.lex_rules.append((term, regex, skip))
+            else:
+                raise ValueError(f"Línea fuera de sección: {raw}")
 
     # Parse productions block
     for ln in prod_lines:
@@ -76,11 +83,25 @@ def load_grammar_file(path: str) -> Tuple[GrammarSpec, Grammar]:
         A = lhs.strip()
         alts = [alt.strip() for alt in rhs.split('|')]
         for alt in alts:
-            if alt == '' or alt.lower() == 'ε':
+            if alt == '' or alt.lower() == 'ε' or alt == 'ε':
                 spec.prods.append((A, []))
             else:
                 symbols = [s for s in alt.split() if s]
                 spec.prods.append((A, symbols))
+
+    # If headers were missing, infer nonterminals, terminals and start
+    if not saw_header:
+        lhs_order = [A for (A, _) in spec.prods]
+        if lhs_order:
+            spec.start = lhs_order[0]
+        nonterms = {A for (A, _) in spec.prods}
+        spec.nonterms = sorted(list(nonterms))
+        rhs_syms = set()
+        for (_, rhs) in spec.prods:
+            for s in rhs:
+                if s != 'ε':
+                    rhs_syms.add(s)
+        spec.terms = sorted([s for s in rhs_syms if s not in nonterms])
 
     G = spec.to_grammar()
     return spec, G
