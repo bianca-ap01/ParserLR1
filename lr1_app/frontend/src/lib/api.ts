@@ -1,5 +1,6 @@
 
-const API = (path: string) => `http://localhost:8000${path}`
+//const API = (path: string) => `http://localhost:8000${path}`
+const API = (path: string) => `/api${path}`
 
 export async function buildLR1(text: string){
   const r = await fetch(API('/lr1/build'),{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text})})

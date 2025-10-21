@@ -5,9 +5,13 @@ from typing import Dict, Any, List
 from .models import GrammarRequest, RegexRequest, NFAResponse, NFATransition, DFAResponse, LR1Response
 from .utils.tables import action_to_dict, goto_to_dict
 
-from lr1.grammar_io import GrammarSpec
-from lr1.builder import LR1Builder
-from lr1.tables import Tables
+#from lr1.grammar_io import GrammarSpec
+#from lr1.builder import LR1Builder
+#from lr1.tables import Tables
+
+from lr1_app.backend.lr1_project.src.lr1.grammar_io import GrammarSpec
+from lr1_app.backend.lr1_project.src.lr1.builder import LR1Builder
+from lr1_app.backend.lr1_project.src.lr1.tables import Tables
 
 from .lex.regex_thompson import to_postfix, thompson_from_postfix, EPS, epsilon_closure
 from .lex.dfa_subset import nfa_to_dfa
