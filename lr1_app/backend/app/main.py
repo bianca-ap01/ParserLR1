@@ -138,6 +138,14 @@ def lr1_build(req: GrammarRequest):
     show_syms = nonterminals + terminals
     first_map = {X: sorted(list(G.first(X))) for X in show_syms}
     follow_sets = G.follow_sets()
+    # Asegurar que el símbolo inicial aumentado tenga $ en FOLLOW
+    try:
+        aug = builder.aug_start
+        if aug not in follow_sets:
+            follow_sets[aug] = set()
+        follow_sets[aug].add('$')
+    except Exception:
+        pass
     follow_map = {A: sorted(list(follow_sets.get(A, set()))) for A in nonterminals}
 
     return LR1Response(
@@ -200,4 +208,3 @@ def nfa_to_dfa_endpoint(nfa: NFAResponse):
         transitions=rows,
         subset_table=subset_table,
     )
-
