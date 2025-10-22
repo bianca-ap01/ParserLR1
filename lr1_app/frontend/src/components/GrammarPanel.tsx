@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react'
 import { buildLR1 } from '../lib/api'
 import DataTable from './DataTable'
@@ -11,12 +10,12 @@ PRODUCTIONS:
   T -> T * F | F
   F -> ( E ) | id
 LEXER:
-  id:      /[a-zA-Z_]\w*/
-  '+':     /\+/
-  '*':     /\*/
-  '(':     /\(/
-  ')':     /\)/
-  WS:      /\s+/ skip`;
+  id:      /[a-zA-Z_]\\w*/
+  '+':     /\\+/
+  '*':     /\\*/
+  '(':     /\\(/
+  ')':     /\\)/
+  WS:      /\\s+/ skip`;
 
 export default function GrammarPanel(){
   const [text, setText] = useState(EXPR)
@@ -35,7 +34,12 @@ export default function GrammarPanel(){
   const closureCols = ['state','items']
   const closureRows = (data?.states||[]).map((s:any)=>({
     state: s.state,
-    items: s.items.map((it:any)=>`[${it.lhs} → ${[...it.rhs.slice(0,it.dot),'·',...it.rhs.slice(it.dot)].join(' ')}, ${it.la}]`).join('\n')
+    items: s.items.map((it:any)=>{
+      const left = it.rhs.slice(0, it.dot).join(' ')
+      const right = it.rhs.slice(it.dot).join(' ')
+      const body = [left, '·', right].filter(Boolean).join(' ').trim()
+      return `[${it.lhs} -> ${body}, ${it.la}]`
+    }).join('\n')
   }))
 
   const actionTerms = Array.from(new Set(Object.values(data?.action||{}).flatMap((r:any)=>Object.keys(r)))).sort()
@@ -56,8 +60,37 @@ export default function GrammarPanel(){
         <div className="mt-4">
           {Array.isArray(data.grammar_augmented) && data.grammar_augmented.length > 0 && (
             <div className="mb-4">
-              <h3 className="font-semibold mb-1">Gramatica aumentada</h3>
+              <h3 className="font-semibold mb-1">Gramática aumentada</h3>
               <pre className="text-sm whitespace-pre-wrap">{data.grammar_augmented.join('\n')}</pre>
+            </div>
+          )}
+          {(Array.isArray(data.nonterminals) || Array.isArray(data.terminals)) && (
+            <div className="mb-4">
+              <h3 className="font-semibold mb-1">Símbolos</h3>
+              <div className="text-sm">
+                {Array.isArray(data.nonterminals) && (<div><b>No terminales:</b> {data.nonterminals.join(', ')}</div>)}
+                {Array.isArray(data.terminals) && (<div><b>Terminales:</b> {data.terminals.join(', ')}</div>)}
+              </div>
+            </div>
+          )}
+          {(data.first || data.follow) && (
+            <div className="mb-4 grid md:grid-cols-2 gap-4 text-sm">
+              {data.first && (
+                <div>
+                  <h3 className="font-semibold mb-1">FIRST</h3>
+                  <pre className="whitespace-pre-wrap">
+                    {Object.entries<any>(data.first).map(([k,v])=>`${k}: {${(v||[]).join(', ')}}`).join('\n')}
+                  </pre>
+                </div>
+              )}
+              {data.follow && (
+                <div>
+                  <h3 className="font-semibold mb-1">FOLLOW</h3>
+                  <pre className="whitespace-pre-wrap">
+                    {Object.entries<any>(data.follow).map(([k,v])=>`${k}: {${(v||[]).join(', ')}}`).join('\n')}
+                  </pre>
+                </div>
+              )}
             </div>
           )}
           <div className="tabs">

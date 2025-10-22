@@ -35,3 +35,8 @@ class LR1Response(BaseModel):
     states: List[Dict[str, Any]]
     transitions: List[Dict[str, Any]]
     grammar_augmented: List[str]
+    # Analysis fields (augmented grammar)
+    terminals: List[str]
+    nonterminals: List[str]
+    first: Dict[str, List[str]]
+    follow: Dict[str, List[str]]

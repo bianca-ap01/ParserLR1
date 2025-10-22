@@ -1,16 +1,16 @@
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any, List
+
 from .models import GrammarRequest, RegexRequest, NFAResponse, NFATransition, DFAResponse, LR1Response
 from .utils.tables import action_to_dict, goto_to_dict
 
 from lr1.grammar_io import GrammarSpec
 from lr1.builder import LR1Builder
 from lr1.tables import Tables
+from lr1.grammar import EPS as G_EPS
 
 from .lex.regex_thompson import to_postfix, thompson_from_postfix, EPS as RE_EPS, epsilon_closure
-from lr1.grammar import EPS as G_EPS
 from .lex.dfa_subset import nfa_to_dfa
 
 import re
@@ -27,32 +27,70 @@ app.add_middleware(
 _SECTION_RE = re.compile(r"^(START|NONTERMINALS|TERMINALS|PRODUCTIONS|LEXER):\s*(.*)$")
 _LEXER_LINE_RE = re.compile(r"^(.+?):\s*/(.+?)/\s*(skip)?$")
 
-def load_grammar_from_text(text: str):
+
+def load_grammar_from_text(text: str) -> GrammarSpec:
     lines = [ln.rstrip("\n") for ln in text.splitlines()]
     spec = GrammarSpec()
     prod_lines: List[str] = []
     current = None
-    # Soporta BNF simple sin encabezados (solo producciones)
+
+    # Detectar si hay encabezados; si no, tratamos todo como producciones
     saw_header = any(_SECTION_RE.match(ln) for ln in lines if ln.strip())
+
     if not saw_header:
         for raw in lines:
             if not raw.strip():
                 continue
             prod_lines.append(raw.strip())
-        # Parsear producciones
-        for ln in prod_lines:
-            if '->' not in ln:
+    else:
+        for raw in lines:
+            if not raw.strip():
                 continue
-            lhs, rhs = ln.split('->', 1)
-            A = lhs.strip()
-            alts = [alt.strip() for alt in rhs.split('|')]
-            for alt in alts:
-                if alt == '' or alt.lower() == '��' or alt == '��':
-                    spec.prods.append((A, []))
-                else:
-                    symbols = [s for s in alt.split() if s]
-                    spec.prods.append((A, symbols))
-        # Inferir START/NONTERMINALS/TERMINALS
+            m = _SECTION_RE.match(raw)
+            if m:
+                current = m.group(1)
+                rest = m.group(2)
+                if current == 'START':
+                    spec.start = rest.strip()
+                elif current == 'NONTERMINALS':
+                    spec.nonterms = [t for t in rest.split() if t]
+                elif current == 'TERMINALS':
+                    spec.terms = [t for t in rest.split() if t]
+                elif current == 'PRODUCTIONS':
+                    prod_lines.clear()
+                elif current == 'LEXER':
+                    pass
+                continue
+            if current == 'PRODUCTIONS':
+                prod_lines.append(raw.strip())
+            elif current == 'LEXER':
+                mm = _LEXER_LINE_RE.match(raw.strip())
+                if not mm:
+                    raise ValueError(f"Línea de lexer inválida: {raw}")
+                name = mm.group(1).strip()
+                term = name[1:-1] if (name.startswith("'") and name.endswith("'")) or (name.startswith('"') and name.endswith('"')) else name
+                regex = mm.group(2)
+                skip = bool(mm.group(3))
+                spec.lex_rules.append((term, regex, skip))
+            else:
+                raise ValueError(f"Línea fuera de sección: {raw}")
+
+    # Parseo de producciones
+    for ln in prod_lines:
+        if '->' not in ln:
+            continue
+        lhs, rhs = ln.split('->', 1)
+        A = lhs.strip()
+        alts = [alt.strip() for alt in rhs.split('|')]
+        for alt in alts:
+            if alt == '' or alt.lower() == '��' or alt == '��':
+                spec.prods.append((A, []))
+            else:
+                symbols = [s for s in alt.split() if s]
+                spec.prods.append((A, symbols))
+
+    # Si no hubo encabezados, inferir START/NONTERMINALS/TERMINALS
+    if not saw_header:
         lhs_order = [A for (A, _) in spec.prods]
         if lhs_order:
             spec.start = lhs_order[0]
@@ -64,51 +102,9 @@ def load_grammar_from_text(text: str):
                 if s != '��':
                     rhs_syms.add(s)
         spec.terms = sorted([s for s in rhs_syms if s not in nonterms])
-        return spec
-    for raw in lines:
-        if not raw.strip():
-            continue
-        m = _SECTION_RE.match(raw)
-        if m:
-            current = m.group(1)
-            rest = m.group(2)
-            if current == 'START':
-                spec.start = rest.strip()
-            elif current == 'NONTERMINALS':
-                spec.nonterms = [t for t in rest.split() if t]
-            elif current == 'TERMINALS':
-                spec.terms = [t for t in rest.split() if t]
-            elif current == 'PRODUCTIONS':
-                prod_lines.clear()
-            elif current == 'LEXER':
-                pass
-            continue
-        if current == 'PRODUCTIONS':
-            prod_lines.append(raw.strip())
-        elif current == 'LEXER':
-            mm = _LEXER_LINE_RE.match(raw.strip())
-            if not mm:
-                raise ValueError(f"Línea de lexer inválida: {raw}")
-            name = mm.group(1).strip()
-            term = name[1:-1] if (name.startswith("'") and name.endswith("'")) or (name.startswith('"') and name.endswith('"')) else name
-            regex = mm.group(2)
-            skip = bool(mm.group(3))
-            spec.lex_rules.append((term, regex, skip))
-        else:
-            raise ValueError(f"Línea fuera de sección: {raw}")
-    for ln in prod_lines:
-        if '->' not in ln:
-            continue
-        lhs, rhs = ln.split('->', 1)
-        A = lhs.strip()
-        alts = [alt.strip() for alt in rhs.split('|')]
-        for alt in alts:
-            if alt == '' or alt.lower() == 'ε':
-                spec.prods.append((A, []))
-            else:
-                symbols = [s for s in alt.split() if s]
-                spec.prods.append((A, symbols))
+
     return spec
+
 
 @app.post('/lr1/build', response_model=LR1Response)
 def lr1_build(req: GrammarRequest):
@@ -127,14 +123,22 @@ def lr1_build(req: GrammarRequest):
 
     trans_out = [{'from': i, 'symbol': X, 'to': j} for (i, X), j in trans.items()]
 
-    # Construir gramática aumentada como lista de strings
+    # Gramática aumentada como lista de strings
     grammar_augmented = []
     for lhs, rhs in G.productions:
         if len(rhs) == 1 and rhs[0] == G_EPS:
-            rhs_str = 'ε'
+            rhs_str = G_EPS
         else:
             rhs_str = ' '.join(rhs)
         grammar_augmented.append(f"{lhs} -> {rhs_str}")
+
+    # Símbolos, FIRST y FOLLOW (de la gramática aumentada)
+    nonterminals = sorted(list(G.nonterminals))
+    terminals = sorted([t for t in G.terminals if t != '$'])
+    show_syms = nonterminals + terminals
+    first_map = {X: sorted(list(G.first(X))) for X in show_syms}
+    follow_sets = G.follow_sets()
+    follow_map = {A: sorted(list(follow_sets.get(A, set()))) for A in nonterminals}
 
     return LR1Response(
         action=action_to_dict(tables.ACTION),
@@ -143,7 +147,12 @@ def lr1_build(req: GrammarRequest):
         states=states_out,
         transitions=trans_out,
         grammar_augmented=grammar_augmented,
+        terminals=terminals,
+        nonterminals=nonterminals,
+        first=first_map,
+        follow=follow_map,
     )
+
 
 @app.post('/lex/regex2nfa', response_model=NFAResponse)
 def regex_to_nfa(req: RegexRequest):
@@ -161,6 +170,7 @@ def regex_to_nfa(req: RegexRequest):
             for v in dests:
                 transitions.append(NFATransition(src=u, sym=a, dst=v))
     return NFAResponse(states=states, start=nfa.start, finals=sorted(list(nfa.finals)), transitions=transitions, eclosure=ecl)
+
 
 @app.post('/lex/nfa2dfa', response_model=DFAResponse)
 def nfa_to_dfa_endpoint(nfa: NFAResponse):
@@ -190,3 +200,4 @@ def nfa_to_dfa_endpoint(nfa: NFAResponse):
         transitions=rows,
         subset_table=subset_table,
     )
+
