@@ -34,3 +34,4 @@ class LR1Response(BaseModel):
     conflicts: List[Dict[str, Any]]
     states: List[Dict[str, Any]]
     transitions: List[Dict[str, Any]]
+    grammar_augmented: List[str]

@@ -9,7 +9,8 @@ from lr1.grammar_io import GrammarSpec
 from lr1.builder import LR1Builder
 from lr1.tables import Tables
 
-from .lex.regex_thompson import to_postfix, thompson_from_postfix, EPS, epsilon_closure
+from .lex.regex_thompson import to_postfix, thompson_from_postfix, EPS as RE_EPS, epsilon_closure
+from lr1.grammar import EPS as G_EPS
 from .lex.dfa_subset import nfa_to_dfa
 
 import re
@@ -126,12 +127,22 @@ def lr1_build(req: GrammarRequest):
 
     trans_out = [{'from': i, 'symbol': X, 'to': j} for (i, X), j in trans.items()]
 
+    # Construir gramática aumentada como lista de strings
+    grammar_augmented = []
+    for lhs, rhs in G.productions:
+        if len(rhs) == 1 and rhs[0] == G_EPS:
+            rhs_str = 'ε'
+        else:
+            rhs_str = ' '.join(rhs)
+        grammar_augmented.append(f"{lhs} -> {rhs_str}")
+
     return LR1Response(
         action=action_to_dict(tables.ACTION),
         goto=goto_to_dict(tables.GOTO),
         conflicts=[{'type': c[0], 'state': c[1], 'symbol': c[2]} for c in tables.conflicts],
         states=states_out,
         transitions=trans_out,
+        grammar_augmented=grammar_augmented,
     )
 
 @app.post('/lex/regex2nfa', response_model=NFAResponse)

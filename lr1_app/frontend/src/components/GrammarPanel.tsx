@@ -54,6 +54,12 @@ export default function GrammarPanel(){
       </div>
       {data && (
         <div className="mt-4">
+          {Array.isArray(data.grammar_augmented) && data.grammar_augmented.length > 0 && (
+            <div className="mb-4">
+              <h3 className="font-semibold mb-1">Gramatica aumentada</h3>
+              <pre className="text-sm whitespace-pre-wrap">{data.grammar_augmented.join('\n')}</pre>
+            </div>
+          )}
           <div className="tabs">
             <div className={`tab ${tab==='closure'?'active':''}`} onClick={()=>setTab('closure')}>Tabla de clausura (estados/ítems)</div>
             <div className={`tab ${tab==='action'?'active':''}`} onClick={()=>setTab('action')}>Tabla de sintaxis (ACTION/GOTO)</div>
