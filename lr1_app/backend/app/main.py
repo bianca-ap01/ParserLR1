@@ -31,6 +31,39 @@ def load_grammar_from_text(text: str):
     spec = GrammarSpec()
     prod_lines: List[str] = []
     current = None
+    # Soporta BNF simple sin encabezados (solo producciones)
+    saw_header = any(_SECTION_RE.match(ln) for ln in lines if ln.strip())
+    if not saw_header:
+        for raw in lines:
+            if not raw.strip():
+                continue
+            prod_lines.append(raw.strip())
+        # Parsear producciones
+        for ln in prod_lines:
+            if '->' not in ln:
+                continue
+            lhs, rhs = ln.split('->', 1)
+            A = lhs.strip()
+            alts = [alt.strip() for alt in rhs.split('|')]
+            for alt in alts:
+                if alt == '' or alt.lower() == '��' or alt == '��':
+                    spec.prods.append((A, []))
+                else:
+                    symbols = [s for s in alt.split() if s]
+                    spec.prods.append((A, symbols))
+        # Inferir START/NONTERMINALS/TERMINALS
+        lhs_order = [A for (A, _) in spec.prods]
+        if lhs_order:
+            spec.start = lhs_order[0]
+        nonterms = {A for (A, _) in spec.prods}
+        spec.nonterms = sorted(list(nonterms))
+        rhs_syms = set()
+        for (_, rhs) in spec.prods:
+            for s in rhs:
+                if s != '��':
+                    rhs_syms.add(s)
+        spec.terms = sorted([s for s in rhs_syms if s not in nonterms])
+        return spec
     for raw in lines:
         if not raw.strip():
             continue
