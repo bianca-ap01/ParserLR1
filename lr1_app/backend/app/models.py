@@ -1,6 +1,6 @@
 
 from pydantic import BaseModel
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Optional
 
 class GrammarRequest(BaseModel):
     text: str  # archivo de gramática estilo labs
