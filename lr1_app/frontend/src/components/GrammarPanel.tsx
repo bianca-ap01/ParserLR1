@@ -64,6 +64,17 @@ export default function GrammarPanel(){
     return patched
   })
   const gotoRows = Object.entries(data?.goto||{}).map(([st,row]:any)=>({state: st, ...row}))
+  // Combined ACTION + GOTO
+  const combinedCols = ['state', ...actionTerms.map((t:string)=>`ACTION:${t}`), '||', ...gotoNonterms.map((A:string)=>`GOTO:${A}`)]
+  const stateKeys = Array.from(new Set([...Object.keys(data?.action||{}), ...Object.keys(data?.goto||{})])).sort((a:any,b:any)=>Number(a)-Number(b))
+  const combinedRows = stateKeys.map((st:any)=>{
+    const arow = (data?.action||{})[st] || {}
+    const grow = (data?.goto||{})[st] || {}
+    const row:any = { state: st, '||': '' }
+    for(const t of actionTerms){ row[`ACTION:${t}`] = fixEps(arow[t]||'') }
+    for(const A of gotoNonterms){ row[`GOTO:${A}`] = (grow[A]!==undefined? grow[A] : '') }
+    return row
+  })
 
   const traceCols = ['Stack','Lookahead','Remaining','Action']
   const fixEpsAction = (val: string) => (typeof val==='string' ? val.replace(/(reduce\s+[^>]+->)\s*$/,'$1 ε') : val)
@@ -159,15 +170,9 @@ export default function GrammarPanel(){
           </div>
           {tab==='closure' && (<DataTable columns={closureCols} rows={closureRows} />)}
           {tab==='action' && (
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <h3 className="font-semibold mb-1">ACTION</h3>
-                <DataTable columns={actionCols} rows={actionRows} />
-              </div>
-              <div>
-                <h3 className="font-semibold mb-1">GOTO</h3>
-                <DataTable columns={gotoCols} rows={gotoRows} />
-              </div>
+            <div className="mt-2">
+              <h3 className="font-semibold mb-1">ACTION / GOTO</h3>
+              <DataTable columns={combinedCols} rows={combinedRows} />
             </div>
           )}
 
