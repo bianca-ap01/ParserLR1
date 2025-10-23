@@ -2,7 +2,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any, List
 
-from .models import GrammarRequest, RegexRequest, NFAResponse, NFATransition, DFAResponse, LR1Response
+from .models import (
+    GrammarRequest,
+    RegexRequest,
+    NFAResponse,
+    NFATransition,
+    DFAResponse,
+    LR1Response,
+    ParseRequest,
+    TraceStep,
+    ParseTraceResponse,
+)
 from .utils.tables import action_to_dict, goto_to_dict
 
 from lr1.grammar_io import GrammarSpec
@@ -10,6 +20,7 @@ from lr1.builder import LR1Builder
 from lr1.tables import Tables
 from lr1.grammar import EPS as G_EPS
 from lr1.items import LR1Item
+from lr1.lexer import Lexer
 
 from .lex.regex_thompson import to_postfix, thompson_from_postfix, EPS as RE_EPS, epsilon_closure
 from .lex.dfa_subset import nfa_to_dfa
@@ -355,3 +366,64 @@ def nfa_to_dfa_endpoint(nfa: NFAResponse):
         transitions=rows,
         subset_table=subset_table,
     )
+
+
+@app.post('/lr1/trace', response_model=ParseTraceResponse)
+def lr1_trace(req: ParseRequest):
+    spec = load_grammar_from_text(req.text)
+    G = spec.to_grammar()
+    builder = LR1Builder(G)
+    states, trans = builder.build_canonical_collection()
+    tables = Tables(G, states, trans, builder.aug_start)
+
+    # Build token sequence
+    if req.tokens is not None:
+        token_types = list(req.tokens)
+    elif req.program is not None:
+        if not spec.lex_rules:
+            raise ValueError('No LEXER rules in grammar; provide tokens instead of program.')
+        L = Lexer(spec.lex_rules)
+        token_types = [t for (t, lx) in L.tokenize(req.program)]
+    else:
+        raise ValueError('Provide either tokens or program to parse.')
+
+    token_types.append('$')
+
+    trace: list[TraceStep] = []
+    st: list[int] = [0]
+    i = 0
+    accepted = False
+    while True:
+        s = st[-1]
+        a = token_types[i]
+        act = tables.ACTION.get((s, a))
+        if not act:
+            exp = sorted({sym for (stt, sym) in tables.ACTION.keys() if stt == s})
+            raise ValueError(f"Unexpected token {a} at input pos {i}; expected {exp}")
+        if act.kind == 'shift':
+            action_str = f'shift {act.value}'
+        elif act.kind == 'reduce':
+            lhs, rhs = act.value
+            body = 'ε' if (len(rhs) == 1 and rhs[0] == G_EPS) else ' '.join(rhs)
+            action_str = f'reduce {lhs} -> {body}'
+        else:
+            action_str = 'accept'
+        trace.append(TraceStep(stack=list(st), lookahead=a, remaining=token_types[i:], action=action_str))
+        if act.kind == 'shift':
+            st.append(int(act.value))  # type: ignore
+            i += 1
+        elif act.kind == 'reduce':
+            lhs, rhs = act.value  # type: ignore
+            k = 0 if rhs == (G_EPS,) else len(rhs)
+            for _ in range(k):
+                st.pop()
+            s2 = st[-1]
+            j = tables.GOTO.get((s2, lhs))
+            if j is None:
+                raise RuntimeError(f'Missing GOTO[{s2},{lhs}]')
+            st.append(j)
+        else:
+            accepted = True
+            break
+
+    return ParseTraceResponse(steps=trace, tokens=token_types[:-1], accepted=accepted, message='ok')

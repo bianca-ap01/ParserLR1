@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { buildLR1 } from '../lib/api'
+import { buildLR1, traceParse } from '../lib/api'
 import DataTable from './DataTable'
 
 const EXPR = `START: E
@@ -22,6 +22,9 @@ export default function GrammarPanel(){
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<any|null>(null)
   const [tab, setTab] = useState<'closure'|'action'>('closure')
+  const [traceTokens, setTraceTokens] = useState('')
+  const [trace, setTrace] = useState<any[]|null>(null)
+  const [traceErr, setTraceErr] = useState<string|undefined>()
 
   async function onBuild(){
     setLoading(true)
@@ -29,6 +32,16 @@ export default function GrammarPanel(){
       const res = await buildLR1(text)
       setData(res)
     }finally{ setLoading(false) }
+  }
+
+  async function onTrace(){
+    setTraceErr(undefined)
+    setTrace(null)
+    try{
+      const tokens = traceTokens.trim()? traceTokens.trim().split(/\s+/): []
+      const res = await traceParse(text, tokens.length? tokens: undefined, undefined)
+      setTrace(res.steps||[])
+    }catch(e:any){ setTraceErr(String(e)) }
   }
 
   const closureCols = ['state','items']
@@ -54,8 +67,8 @@ export default function GrammarPanel(){
   const gotoCols = ['state', ...gotoNonterms]
   const fixEps = (val: any) => {
     if (typeof val !== 'string') return val
-    // If body of a reduce is empty, show epsilon symbol explicitly
-    return val.replace(/r\[([^\]]*?)->\s*\]/g, (m, p1) => `r[${p1}-> ε]`)
+    // Ensure epsilon shows for empty-body reduces: r[X -> ] => r[X -> ε]
+    return val.replace(/r\[(.+?)\-\>\s*\]/g, (_m, p1) => `r[${p1}-> ε]`)
   }
   const actionRows = Object.entries(data?.action||{}).map(([st,row]:any)=>{
     const patched: any = { state: st }
@@ -63,6 +76,13 @@ export default function GrammarPanel(){
     return patched
   })
   const gotoRows = Object.entries(data?.goto||{}).map(([st,row]:any)=>({state: st, ...row}))
+  const traceCols = ['Stack','Lookahead','Remaining','Action']
+  const traceRows = (trace||[]).map((s:any)=>({
+    Stack: (s.stack||[]).join(' '),
+    Lookahead: s.lookahead,
+    Remaining: (s.remaining||[]).join(' '),
+    Action: s.action,
+  }))
 
   return (
     <div className="card">
@@ -137,6 +157,16 @@ export default function GrammarPanel(){
               </div>
             </div>
           )}
+
+          <div className="mt-6">
+            <h3 className="font-semibold mb-1">Pila de análisis (tokens separados por espacios)</h3>
+            <div className="flex gap-2 items-center mb-2">
+              <input className="input" placeholder="Ej: id + id * ( id )" value={traceTokens} onChange={e=>setTraceTokens(e.target.value)} />
+              <button className="btn" onClick={onTrace}>Simular</button>
+            </div>
+            {traceErr && <div className="text-red-600 text-sm">{traceErr}</div>}
+            {trace && <DataTable columns={traceCols} rows={traceRows} />}
+          </div>
         </div>
       )}
     </div>

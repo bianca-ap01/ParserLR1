@@ -44,3 +44,20 @@ class LR1Response(BaseModel):
     items_nfa: Dict[str, Any] | None = None
     # Optional visualization of LR(1) states DFA (canonical collection)
     items_dfa: Dict[str, Any] | None = None
+
+class ParseRequest(BaseModel):
+    text: str
+    program: Optional[str] = None  # raw source to tokenize (requires LEXER)
+    tokens: Optional[List[str]] = None  # explicit token types (spaces-separated in UI)
+
+class TraceStep(BaseModel):
+    stack: List[int]
+    lookahead: str
+    remaining: List[str]
+    action: str
+
+class ParseTraceResponse(BaseModel):
+    steps: List[TraceStep]
+    tokens: List[str]
+    accepted: bool
+    message: Optional[str] = None

@@ -1,4 +1,4 @@
-
+﻿
 const API = (path: string) => `http://localhost:8000${path}`
 
 export async function buildLR1(text: string){
@@ -16,5 +16,13 @@ export async function regex2nfa(pattern: string){
 export async function nfa2dfa(nfa:any){
   const r = await fetch(API('/lex/nfa2dfa'),{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(nfa)})
   if(!r.ok) throw new Error('nfa2dfa failed');
+  return r.json()
+}
+export async function traceParse(text: string, tokens?: string[], program?: string){
+  const body:any = { text }
+  if(tokens) body.tokens = tokens
+  if(program !== undefined) body.program = program
+  const r = await fetch(API('/lr1/trace'), {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})
+  if(!r.ok) throw new Error('trace failed')
   return r.json()
 }
