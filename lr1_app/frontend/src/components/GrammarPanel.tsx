@@ -32,12 +32,18 @@ export default function GrammarPanel(){
   }
 
   const closureCols = ['state','items']
+  const isEps = (tok: string) => tok === 'ε' || tok === 'eps' || (typeof tok === 'string' && tok.indexOf('�') >= 0)
   const closureRows = (data?.states||[]).map((s:any)=>({
     state: s.state,
     items: s.items.map((it:any)=>{
-      const left = it.rhs.slice(0, it.dot).join(' ')
-      const right = it.rhs.slice(it.dot).join(' ')
-      const body = [left, '·', right].filter(Boolean).join(' ').trim()
+      const rhs = (it.rhs||[]).filter((t:string)=>!isEps(t))
+      const left = rhs.slice(0, it.dot).join(' ')
+      const right = rhs.slice(it.dot).join(' ')
+      const parts = [] as string[]
+      if(left) parts.push(left)
+      parts.push('·')
+      if(right) parts.push(right)
+      const body = parts.join(' ')
       return `[${it.lhs} -> ${body}, ${it.la}]`
     }).join('\n')
   }))

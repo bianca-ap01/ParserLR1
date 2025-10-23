@@ -50,6 +50,7 @@ def load_grammar_file(path: str) -> Tuple[GrammarSpec, Grammar]:
             lhs, rhs = ln.split('->', 1)
             A = lhs.strip()
             alts = [alt.strip() for alt in rhs.split('|')]
+            alts = [("" if a == 'ε' or a.casefold() in {'epsilon','eps'} else a) for a in alts]
             for alt in alts:
                 if alt == '' or alt.lower() == '��' or alt == '��':
                     spec.prods.append((A, []))
@@ -113,6 +114,7 @@ def load_grammar_file(path: str) -> Tuple[GrammarSpec, Grammar]:
         lhs, rhs = ln.split('->', 1)
         A = lhs.strip()
         alts = [alt.strip() for alt in rhs.split('|')]
+        alts = [("" if a == 'ε' or a.casefold() in {'epsilon','eps'} else a) for a in alts]
         for alt in alts:
             if alt == '' or alt.lower() == 'ε':
                 spec.prods.append((A, []))

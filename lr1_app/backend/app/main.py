@@ -83,6 +83,7 @@ def load_grammar_from_text(text: str) -> GrammarSpec:
         lhs, rhs = ln.split('->', 1)
         A = lhs.strip()
         alts = [alt.strip() for alt in rhs.split('|')]
+        alts = [("" if a == 'ε' or a.casefold() in {'epsilon','eps'} else a) for a in alts]
         for alt in alts:
             if alt == '' or alt.lower() == '��' or alt == '��':
                 spec.prods.append((A, []))
@@ -127,8 +128,8 @@ def lr1_build(req: GrammarRequest):
     # Gramática aumentada como lista de strings
     grammar_augmented = []
     for lhs, rhs in G.productions:
-        if len(rhs) == 1 and rhs[0] == G_EPS:
-            rhs_str = G_EPS
+        if len(rhs) == 1 and (rhs[0] == G_EPS or rhs[0] == 'ε'):
+            rhs_str = 'ε'
         else:
             rhs_str = ' '.join(rhs)
         grammar_augmented.append(f"{lhs} -> {rhs_str}")
@@ -155,10 +156,19 @@ def lr1_build(req: GrammarRequest):
         return f"{it.lhs}|{rhs}|{it.dot}|{it.la}"
 
     def item_label(it: LR1Item) -> str:
-        left = ' '.join(it.rhs[:it.dot])
-        right = ' '.join(it.rhs[it.dot:])
-        body = ' '.join(x for x in [left, '·', right] if x and x.strip())
-        return f"[{it.lhs} -> {body}, {it.la}]"
+        def filt(xs):
+            return [x for x in xs if x not in (G_EPS, 'ε', 'eps') and ('�' not in str(x))]
+        rhs = filt(list(it.rhs))
+        left = ' '.join(rhs[:it.dot])
+        right = ' '.join(rhs[it.dot:])
+        parts = []
+        if left:
+            parts.append(left)
+        parts.append('.')
+        if right:
+            parts.append(right)
+        body = ' '.join(parts)
+        return f"{it.lhs} -> {body}, {it.la}"
 
     start_item = LR1Item(builder.aug_start, (G.start,), 0, '$')
     queue: list[LR1Item] = [start_item]
@@ -184,7 +194,9 @@ def lr1_build(req: GrammarRequest):
             seen[k2] = it2
             labels[k2] = item_label(it2)
             queue.append(it2)
-        transitions[k].setdefault(str(X), set()).add(k2)
+        # Skip epsilon-labeled advances
+        if str(X) not in (G_EPS, 'ε', 'eps'):
+            transitions[k].setdefault(str(X), set()).add(k2)
         # cierre si X es no terminal
         if X in G.nonterminals:
             beta = it.rhs[it.dot + 1:]
@@ -193,6 +205,8 @@ def lr1_build(req: GrammarRequest):
             if G_EPS in first_beta:
                 lks.add(it.la)
             for gamma in G.by_lhs.get(X, []):
+                if len(gamma) == 1 and gamma[0] == G_EPS:
+                    gamma = tuple()
                 for b in lks:
                     dest = LR1Item(X, gamma, 0, b)
                     kd = item_key(dest)
@@ -238,10 +252,17 @@ def lr1_build(req: GrammarRequest):
             I = states[idx]
             lines = []
             for it in sorted(I, key=lambda z: (z.lhs, z.rhs, z.dot, z.la)):
-                left = ' '.join(it.rhs[:it.dot])
-                right = ' '.join(it.rhs[it.dot:])
-                body = ' '.join(x for x in [left, '·', right] if x and x.strip())
-                lines.append(f"[{it.lhs} -> {body}, {it.la}]")
+                rhs = [x for x in it.rhs if x not in (G_EPS, 'ε', 'eps') and ('�' not in str(x))]
+                left = ' '.join(rhs[:it.dot])
+                right = ' '.join(rhs[it.dot:])
+                parts = []
+                if left:
+                    parts.append(left)
+                parts.append('·')
+                if right:
+                    parts.append(right)
+                body = ' '.join(parts)
+                lines.append(f"{it.lhs} -> {body}, {it.la}")
             return f"I{idx}\n" + "\n".join(lines)
 
         state_label_map = {i: label_state(i) for i in range(len(states))}

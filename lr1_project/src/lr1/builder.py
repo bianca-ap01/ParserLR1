@@ -28,13 +28,16 @@ class LR1Builder:
             new_items: Set[LR1Item] = set()
             for it in Iset:
                 B = it.at_dot()
-                if B and B in G.nonterminals:
+                if B and B != EPS and B in G.nonterminals:
                     beta = it.rhs[it.dot + 1:]
                     first_beta = G.first_of_sequence(beta)
                     lookaheads: Set[Symbol] = {x for x in first_beta if x != EPS}
                     if EPS in first_beta:
                         lookaheads.add(it.la)
                     for gamma in G.by_lhs.get(B, []):
+                        # Treat epsilon-production RHS as empty sequence for items
+                        if len(gamma) == 1 and gamma[0] == EPS:
+                            gamma = tuple()
                         for b in lookaheads:
                             new_items.add(LR1Item(B, gamma, 0, b))
             before = len(Iset)
@@ -43,6 +46,8 @@ class LR1Builder:
         return Iset
 
     def goto(self, I: Iterable[LR1Item], X: Symbol) -> Set[LR1Item]:
+        if X == EPS:
+            return set()
         moved = [it.advance() for it in I if it.at_dot() == X]
         return self.closure(moved) if moved else set()
 
@@ -67,7 +72,8 @@ class LR1Builder:
         while q:
             i = q.popleft()
             I = states[i]
-            next_syms = {it.at_dot() for it in I if it.at_dot() is not None}
+            # Exclude epsilon from transitions in canonical collection
+            next_syms = {X for it in I for X in ([it.at_dot()] if it.at_dot() is not None else []) if X != EPS}
             for X in next_syms:
                 J = self.goto(I, X)
                 if not J:

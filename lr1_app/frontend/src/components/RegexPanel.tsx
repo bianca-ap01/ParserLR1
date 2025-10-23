@@ -20,7 +20,12 @@ export default function RegexPanel(){
   }
 
   const nfaCols = ['src','sym','dst']
-  const nfaRows = (nfa?.transitions||[])
+  const hideEps = (s: string) => (s==='ε' || s==='eps' || (typeof s==='string' && s.indexOf('�')>=0))
+  const nfaRows = (nfa?.transitions||[]).map((t:any)=>({
+    src: t.src,
+    sym: hideEps(t.sym) ? '' : t.sym,
+    dst: t.dst,
+  }))
   const eclosureCols = ['state','closure']
   const eclosureRows = nfa? Object.entries(nfa.eclosure).map(([k,v]:any)=>({state:k, closure:`{${v.join(',')}}`})) : []
 

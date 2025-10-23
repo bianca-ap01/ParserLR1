@@ -71,7 +71,8 @@ def thompson_from_postfix(post: str) -> NFA:
     def lit(a: str):
         s = master._new_state()
         f = master._new_state()
-        master.add_edge(s, a, f)
+        # Treat 'ε' as epsilon transition label
+        master.add_edge(s, (EPS if a == 'ε' else a), f)
         return (s, {f})
 
     for c in post:
