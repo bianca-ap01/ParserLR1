@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+﻿from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any, List
 
@@ -78,14 +78,14 @@ def load_grammar_from_text(text: str) -> GrammarSpec:
             elif current == 'LEXER':
                 mm = _LEXER_LINE_RE.match(raw.strip())
                 if not mm:
-                    raise ValueError(f"Línea de lexer inválida: {raw}")
+                    raise ValueError(f"LÃ­nea de lexer invÃ¡lida: {raw}")
                 name = mm.group(1).strip()
                 term = name[1:-1] if (name.startswith("'") and name.endswith("'")) or (name.startswith('"') and name.endswith('"')) else name
                 regex = mm.group(2)
                 skip = bool(mm.group(3))
                 spec.lex_rules.append((term, regex, skip))
             else:
-                raise ValueError(f"Línea fuera de sección: {raw}")
+                raise ValueError(f"LÃ­nea fuera de secciÃ³n: {raw}")
 
     # Parseo de producciones
     for ln in prod_lines:
@@ -94,9 +94,9 @@ def load_grammar_from_text(text: str) -> GrammarSpec:
         lhs, rhs = ln.split('->', 1)
         A = lhs.strip()
         alts = [alt.strip() for alt in rhs.split('|')]
-        alts = [("" if a == 'ε' or a.casefold() in {'epsilon','eps'} else a) for a in alts]
+        alts = [("" if a == 'Îµ' or a.casefold() in {'epsilon','eps'} else a) for a in alts]
         for alt in alts:
-            if alt == '' or alt.lower() == '��' or alt == '��':
+            if alt == '' or alt.lower() == 'ï¿½ï¿½' or alt == 'ï¿½ï¿½':
                 spec.prods.append((A, []))
             else:
                 symbols = [s for s in alt.split() if s]
@@ -112,7 +112,7 @@ def load_grammar_from_text(text: str) -> GrammarSpec:
         rhs_syms = set()
         for (_, rhs) in spec.prods:
             for s in rhs:
-                if s != '��':
+                if s != 'ï¿½ï¿½':
                     rhs_syms.add(s)
         spec.terms = sorted([s for s in rhs_syms if s not in nonterms])
 
@@ -136,22 +136,22 @@ def lr1_build(req: GrammarRequest):
 
     trans_out = [{'from': i, 'symbol': X, 'to': j} for (i, X), j in trans.items()]
 
-    # Gramática aumentada como lista de strings
+    # GramÃ¡tica aumentada como lista de strings
     grammar_augmented = []
     for lhs, rhs in G.productions:
-        if len(rhs) == 1 and (rhs[0] == G_EPS or rhs[0] == 'ε'):
-            rhs_str = 'ε'
+        if len(rhs) == 1 and (rhs[0] == G_EPS or rhs[0] == 'Îµ'):
+            rhs_str = 'Îµ'
         else:
             rhs_str = ' '.join(rhs)
         grammar_augmented.append(f"{lhs} -> {rhs_str}")
 
-    # Símbolos, FIRST y FOLLOW (de la gramática aumentada)
+    # SÃ­mbolos, FIRST y FOLLOW (de la gramÃ¡tica aumentada)
     nonterminals = sorted(list(G.nonterminals))
     terminals = sorted([t for t in G.terminals if t != '$'])
     show_syms = nonterminals + terminals
     first_map = {X: sorted(list(G.first(X))) for X in show_syms}
     follow_sets = G.follow_sets()
-    # Asegurar que el símbolo inicial aumentado tenga $ en FOLLOW
+    # Asegurar que el sÃ­mbolo inicial aumentado tenga $ en FOLLOW
     try:
         aug = builder.aug_start
         if aug not in follow_sets:
@@ -161,14 +161,14 @@ def lr1_build(req: GrammarRequest):
         pass
     follow_map = {A: sorted(list(follow_sets.get(A, set()))) for A in nonterminals}
 
-    # Construir AFN de ítems LR(1) (estados = ítems, transiciones por símbolo o epsilon por cierre)
+    # Construir AFN de Ã­tems LR(1) (estados = Ã­tems, transiciones por sÃ­mbolo o epsilon por cierre)
     def item_key(it: LR1Item) -> str:
         rhs = ' '.join(it.rhs)
         return f"{it.lhs}|{rhs}|{it.dot}|{it.la}"
 
     def item_label(it: LR1Item) -> str:
         def filt(xs):
-            return [x for x in xs if x not in (G_EPS, 'ε', 'eps') and ('�' not in str(x))]
+            return [x for x in xs if x not in (G_EPS, 'Îµ', 'eps') and ('ï¿½' not in str(x))]
         rhs = filt(list(it.rhs))
         left = ' '.join(rhs[:it.dot])
         right = ' '.join(rhs[it.dot:])
@@ -192,13 +192,13 @@ def lr1_build(req: GrammarRequest):
         it = queue.pop(0)
         k = item_key(it)
         transitions.setdefault(k, {})
-        # final si S' -> S · , $
+        # final si S' -> S Â· , $
         if it.lhs == builder.aug_start and it.dot == len(it.rhs) and it.la == '$':
             finals.add(k)
         X = it.rhs[it.dot] if it.dot < len(it.rhs) else None
         if X is None:
             continue
-        # avance (consumo de símbolo)
+        # avance (consumo de sÃ­mbolo)
         it2 = it.advance()
         k2 = item_key(it2)
         if k2 not in seen:
@@ -206,7 +206,7 @@ def lr1_build(req: GrammarRequest):
             labels[k2] = item_label(it2)
             queue.append(it2)
         # Skip epsilon-labeled advances
-        if str(X) not in (G_EPS, 'ε', 'eps'):
+        if str(X) not in (G_EPS, 'Îµ', 'eps'):
             transitions[k].setdefault(str(X), set()).add(k2)
         # cierre si X es no terminal
         if X in G.nonterminals:
@@ -256,14 +256,14 @@ def lr1_build(req: GrammarRequest):
         'image': img_nfa,
     }
 
-    # DFA de estados LR(1) (colección canónica)
+    # DFA de estados LR(1) (colecciÃ³n canÃ³nica)
     try:
         # Etiquetas con items por estado
         def label_state(idx: int) -> str:
             I = states[idx]
             lines = []
             for it in sorted(I, key=lambda z: (z.lhs, z.rhs, z.dot, z.la)):
-                rhs = [x for x in it.rhs if x not in (G_EPS, 'ε', 'eps') and ('�' not in str(x))]
+                rhs = [x for x in it.rhs if x not in (G_EPS, 'Îµ', 'eps') and ('ï¿½' not in str(x))]
                 left = ' '.join(rhs[:it.dot])
                 right = ' '.join(rhs[it.dot:])
                 parts = []
@@ -404,7 +404,7 @@ def lr1_trace(req: ParseRequest):
             action_str = f'shift {act.value}'
         elif act.kind == 'reduce':
             lhs, rhs = act.value
-            body = 'ε' if (len(rhs) == 1 and rhs[0] == G_EPS) else ' '.join(rhs)
+            body = 'Îµ' if (len(rhs) == 1 and rhs[0] == G_EPS) else ' '.join(rhs)
             action_str = f'reduce {lhs} -> {body}'
         else:
             action_str = 'accept'

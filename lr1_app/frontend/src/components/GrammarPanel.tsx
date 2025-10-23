@@ -77,11 +77,16 @@ export default function GrammarPanel(){
   })
   const gotoRows = Object.entries(data?.goto||{}).map(([st,row]:any)=>({state: st, ...row}))
   const traceCols = ['Stack','Lookahead','Remaining','Action']
+  const fixEpsAction = (val: string) => {
+    if (typeof val !== 'string') return val
+    // replace trailing empty RHS in reduce with epsilon
+    return val.replace(/(reduce\s+[^>]+->)\s*$/,'$1 ε')
+  }
   const traceRows = (trace||[]).map((s:any)=>({
     Stack: (s.stack||[]).join(' '),
     Lookahead: s.lookahead,
     Remaining: (s.remaining||[]).join(' '),
-    Action: s.action,
+    Action: fixEpsAction(s.action||''),
   }))
 
   return (
