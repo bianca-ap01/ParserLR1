@@ -46,7 +46,7 @@ export default function GrammarPanel(){
       const right = rhs.slice(it.dot).join(' ')
       const parts: string[] = []
       if(left) parts.push(left)
-      parts.push('·')
+      parts.push('.')
       if(right) parts.push(right)
       const body = parts.join(' ')
       return `[${it.lhs} -> ${body}, ${it.la}]`

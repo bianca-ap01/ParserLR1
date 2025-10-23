@@ -139,8 +139,8 @@ def lr1_build(req: GrammarRequest):
     # GramÃ¡tica aumentada como lista de strings
     grammar_augmented = []
     for lhs, rhs in G.productions:
-        if len(rhs) == 1 and (rhs[0] == G_EPS or rhs[0] == 'Îµ'):
-            rhs_str = 'Îµ'
+        if len(rhs) == 1 and (rhs[0] == G_EPS or rhs[0] == 'ε'):
+            rhs_str = 'ε'
         else:
             rhs_str = ' '.join(rhs)
         grammar_augmented.append(f"{lhs} -> {rhs_str}")
