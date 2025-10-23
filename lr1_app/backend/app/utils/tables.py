@@ -1,5 +1,5 @@
-
 from typing import Dict
+from lr1.grammar import EPS as G_EPS
 
 def action_to_dict(ACTION) -> Dict[str, Dict[str, str]]:
     out: Dict[str, Dict[str, str]] = {}
@@ -9,7 +9,8 @@ def action_to_dict(ACTION) -> Dict[str, Dict[str, str]]:
             row[str(a)] = f"s{act.value}"
         elif act.kind == 'reduce':
             lhs, rhs = act.value
-            row[str(a)] = f"r[{lhs}→{' '.join(rhs)}]"
+            body = 'ε' if (len(rhs) == 1 and rhs[0] == G_EPS) else ' '.join(rhs)
+            row[str(a)] = f"r[{lhs} -> {body}]"
         else:
             row[str(a)] = 'acc'
     return out
@@ -19,3 +20,4 @@ def goto_to_dict(GOTO) -> Dict[str, Dict[str, int]]:
     for (i, A), j in GOTO.items():
         out.setdefault(str(i), {})[str(A)] = int(j)
     return out
+

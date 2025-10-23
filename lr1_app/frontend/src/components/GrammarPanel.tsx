@@ -52,7 +52,16 @@ export default function GrammarPanel(){
   const gotoNonterms = Array.from(new Set(Object.values(data?.goto||{}).flatMap((r:any)=>Object.keys(r)))).sort()
   const actionCols = ['state', ...actionTerms]
   const gotoCols = ['state', ...gotoNonterms]
-  const actionRows = Object.entries(data?.action||{}).map(([st,row]:any)=>({state: st, ...row}))
+  const fixEps = (val: any) => {
+    if (typeof val !== 'string') return val
+    // If body of a reduce is empty, show epsilon symbol explicitly
+    return val.replace(/r\[([^\]]*?)->\s*\]/g, (m, p1) => `r[${p1}-> ε]`)
+  }
+  const actionRows = Object.entries(data?.action||{}).map(([st,row]:any)=>{
+    const patched: any = { state: st }
+    for(const k of Object.keys(row||{})) patched[k] = fixEps(row[k])
+    return patched
+  })
   const gotoRows = Object.entries(data?.goto||{}).map(([st,row]:any)=>({state: st, ...row}))
 
   return (
