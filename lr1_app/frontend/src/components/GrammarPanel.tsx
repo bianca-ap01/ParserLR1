@@ -64,6 +64,18 @@ export default function GrammarPanel(){
               <pre className="text-sm whitespace-pre-wrap">{data.grammar_augmented.join('\n')}</pre>
             </div>
           )}
+          {data.items_nfa?.image && (
+            <div className="mb-4">
+              <h3 className="font-semibold mb-1">Autómata de ítems LR(1)</h3>
+              <img alt="LR(1) items NFA" src={`data:image/png;base64,${data.items_nfa.image}`} />
+            </div>
+          )}
+          {data.items_dfa?.image && (
+            <div className="mb-4">
+              <h3 className="font-semibold mb-1">DFA de estados LR(1) (colección canónica)</h3>
+              <img alt="LR(1) states DFA" src={`data:image/png;base64,${data.items_dfa.image}`} />
+            </div>
+          )}
           {(Array.isArray(data.nonterminals) || Array.isArray(data.terminals)) && (
             <div className="mb-4">
               <h3 className="font-semibold mb-1">Símbolos</h3>

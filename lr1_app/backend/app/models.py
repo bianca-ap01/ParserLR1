@@ -40,3 +40,7 @@ class LR1Response(BaseModel):
     nonterminals: List[str]
     first: Dict[str, List[str]]
     follow: Dict[str, List[str]]
+    # Optional visualization of LR(1) items NFA
+    items_nfa: Dict[str, Any] | None = None
+    # Optional visualization of LR(1) states DFA (canonical collection)
+    items_dfa: Dict[str, Any] | None = None

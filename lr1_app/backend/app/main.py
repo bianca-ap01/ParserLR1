@@ -9,6 +9,7 @@ from lr1.grammar_io import GrammarSpec
 from lr1.builder import LR1Builder
 from lr1.tables import Tables
 from lr1.grammar import EPS as G_EPS
+from lr1.items import LR1Item
 
 from .lex.regex_thompson import to_postfix, thompson_from_postfix, EPS as RE_EPS, epsilon_closure
 from .lex.dfa_subset import nfa_to_dfa
@@ -148,6 +149,129 @@ def lr1_build(req: GrammarRequest):
         pass
     follow_map = {A: sorted(list(follow_sets.get(A, set()))) for A in nonterminals}
 
+    # Construir AFN de ítems LR(1) (estados = ítems, transiciones por símbolo o epsilon por cierre)
+    def item_key(it: LR1Item) -> str:
+        rhs = ' '.join(it.rhs)
+        return f"{it.lhs}|{rhs}|{it.dot}|{it.la}"
+
+    def item_label(it: LR1Item) -> str:
+        left = ' '.join(it.rhs[:it.dot])
+        right = ' '.join(it.rhs[it.dot:])
+        body = ' '.join(x for x in [left, '·', right] if x and x.strip())
+        return f"[{it.lhs} -> {body}, {it.la}]"
+
+    start_item = LR1Item(builder.aug_start, (G.start,), 0, '$')
+    queue: list[LR1Item] = [start_item]
+    seen: dict[str, LR1Item] = {item_key(start_item): start_item}
+    labels: dict[str, str] = {item_key(start_item): item_label(start_item)}
+    transitions: dict[str, dict[str, set[str]]] = {}
+    finals: set[str] = set()
+
+    while queue:
+        it = queue.pop(0)
+        k = item_key(it)
+        transitions.setdefault(k, {})
+        # final si S' -> S · , $
+        if it.lhs == builder.aug_start and it.dot == len(it.rhs) and it.la == '$':
+            finals.add(k)
+        X = it.rhs[it.dot] if it.dot < len(it.rhs) else None
+        if X is None:
+            continue
+        # avance (consumo de símbolo)
+        it2 = it.advance()
+        k2 = item_key(it2)
+        if k2 not in seen:
+            seen[k2] = it2
+            labels[k2] = item_label(it2)
+            queue.append(it2)
+        transitions[k].setdefault(str(X), set()).add(k2)
+        # cierre si X es no terminal
+        if X in G.nonterminals:
+            beta = it.rhs[it.dot + 1:]
+            first_beta = G.first_of_sequence(beta)
+            lks = {x for x in first_beta if x != G_EPS}
+            if G_EPS in first_beta:
+                lks.add(it.la)
+            for gamma in G.by_lhs.get(X, []):
+                for b in lks:
+                    dest = LR1Item(X, gamma, 0, b)
+                    kd = item_key(dest)
+                    if kd not in seen:
+                        seen[kd] = dest
+                        labels[kd] = item_label(dest)
+                        queue.append(dest)
+                    transitions[k].setdefault('eps', set()).add(kd)
+
+    # Armar DOT e imagen usando util existente
+    state_ids = list(seen.keys())
+    state_labels = {k: labels[k] for k in state_ids}
+    # Convertir transiciones a formato requerido por graphviz util (con labels de estados)
+    trans_for_dot: dict[str, dict[str, list[str]]] = {}
+    for src_k, mp in transitions.items():
+        src_label = state_labels[src_k]
+        for sym, dests in mp.items():
+            for dk in dests:
+                dst_label = state_labels[dk]
+                trans_for_dot.setdefault(src_label, {}).setdefault(sym, []).append(dst_label)
+    states_for_dot = list(state_labels.values())
+    start_label = state_labels[item_key(start_item)]
+    finals_labels = [state_labels[k] for k in finals]
+    # Render image (optional if graphviz installed)
+    try:
+        from .utils.graphviz import automaton_to_dot, automaton_to_base64
+        dot = automaton_to_dot(states_for_dot, start_label, finals_labels, trans_for_dot, is_nfa=True)
+        img_nfa = automaton_to_base64(dot)
+    except Exception:
+        img_nfa = None
+    items_nfa = {
+        'states': states_for_dot,
+        'start': start_label,
+        'finals': finals_labels,
+        'transitions': trans_for_dot,
+        'image': img_nfa,
+    }
+
+    # DFA de estados LR(1) (colección canónica)
+    try:
+        # Etiquetas con items por estado
+        def label_state(idx: int) -> str:
+            I = states[idx]
+            lines = []
+            for it in sorted(I, key=lambda z: (z.lhs, z.rhs, z.dot, z.la)):
+                left = ' '.join(it.rhs[:it.dot])
+                right = ' '.join(it.rhs[it.dot:])
+                body = ' '.join(x for x in [left, '·', right] if x and x.strip())
+                lines.append(f"[{it.lhs} -> {body}, {it.la}]")
+            return f"I{idx}\n" + "\n".join(lines)
+
+        state_label_map = {i: label_state(i) for i in range(len(states))}
+        dfa_states = [state_label_map[i] for i in range(len(states))]
+        dfa_start = state_label_map[0]
+        dfa_finals = []
+        for i, I in enumerate(states):
+            if any((it.lhs == builder.aug_start and it.dot == len(it.rhs) and it.la == '$') for it in I):
+                dfa_finals.append(state_label_map[i])
+        dfa_trans: Dict[str, Dict[str, str]] = {}
+        for (i, X), j in trans.items():
+            src = state_label_map[i]
+            dst = state_label_map[j]
+            dfa_trans.setdefault(src, {})[str(X)] = dst
+        try:
+            from .utils.graphviz import automaton_to_dot, automaton_to_base64
+            dot_dfa = automaton_to_dot(dfa_states, dfa_start, dfa_finals, dfa_trans, is_nfa=False)
+            img_dfa = automaton_to_base64(dot_dfa)
+        except Exception:
+            img_dfa = None
+        items_dfa = {
+            'states': dfa_states,
+            'start': dfa_start,
+            'finals': dfa_finals,
+            'transitions': dfa_trans,
+            'image': img_dfa,
+        }
+    except Exception:
+        items_dfa = None
+
     return LR1Response(
         action=action_to_dict(tables.ACTION),
         goto=goto_to_dict(tables.GOTO),
@@ -159,6 +283,8 @@ def lr1_build(req: GrammarRequest):
         nonterminals=nonterminals,
         first=first_map,
         follow=follow_map,
+        items_nfa=items_nfa,
+        items_dfa=items_dfa,
     )
 
 
