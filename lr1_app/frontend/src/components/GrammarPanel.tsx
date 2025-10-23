@@ -2,9 +2,8 @@ import React, { useState } from 'react'
 import { buildLR1, traceParse } from '../lib/api'
 import DataTable from './DataTable'
 
-const EXPR = `E -> E + T | T
-T -> T * F | F
-F -> ( E ) | id`;
+const EXPR = `A -> A ( A )
+A -> ε`;
 
 export default function GrammarPanel(){
   const [text, setText] = useState(EXPR)
@@ -103,7 +102,7 @@ export default function GrammarPanel(){
           {data.items_nfa?.image && (
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2">
-                <h3 className="font-semibold">Autómata de ítems LR(1)</h3>
+                <h3 className="font-semibold">AFN - ítems LR(1)</h3>
                 <div className="ml-auto flex gap-2">
                   <button className="btn" onClick={()=>setNfaZoom(z=>Math.max(0.25, z-0.25))}>-</button>
                   <span>{Math.round(nfaZoom*100)}%</span>
@@ -119,7 +118,7 @@ export default function GrammarPanel(){
           {data.items_dfa?.image && (
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2">
-                <h3 className="font-semibold">DFA de estados LR(1) (colección canónica)</h3>
+                <h3 className="font-semibold">DFA - Estados LR(1)</h3>
                 <div className="ml-auto flex gap-2">
                   <button className="btn" onClick={()=>setDfaZoom(z=>Math.max(0.25, z-0.25))}>-</button>
                   <span>{Math.round(dfaZoom*100)}%</span>
