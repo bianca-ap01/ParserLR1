@@ -14,12 +14,15 @@ export default function GrammarPanel(){
   const [traceTokens, setTraceTokens] = useState('')
   const [trace, setTrace] = useState<any[]|null>(null)
   const [traceErr, setTraceErr] = useState<string|undefined>()
+  const [nfaZoom, setNfaZoom] = useState(1)
+  const [dfaZoom, setDfaZoom] = useState(1)
 
   async function onBuild(){
     setLoading(true)
     try{
       const res = await buildLR1(text)
       setData(res)
+      setNfaZoom(1); setDfaZoom(1)
     }finally{ setLoading(false) }
   }
 
@@ -88,14 +91,34 @@ export default function GrammarPanel(){
           )}
           {data.items_nfa?.image && (
             <div className="mb-4">
-              <h3 className="font-semibold mb-1">Autómata de ítems LR(1)</h3>
-              <img alt="LR(1) items NFA" src={`data:image/png;base64,${data.items_nfa.image}`} />
+              <div className="flex items-center gap-2 mb-2">
+                <h3 className="font-semibold">Autómata de ítems LR(1)</h3>
+                <div className="ml-auto flex gap-2">
+                  <button className="btn" onClick={()=>setNfaZoom(z=>Math.max(0.25, z-0.25))}>-</button>
+                  <span>{Math.round(nfaZoom*100)}%</span>
+                  <button className="btn" onClick={()=>setNfaZoom(z=>Math.min(3, z+0.25))}>+</button>
+                  <button className="btn" onClick={()=>setNfaZoom(1)}>Reset</button>
+                </div>
+              </div>
+              <div className="border rounded p-2 overflow-auto" style={{maxHeight:'420px'}}>
+                <img alt="LR(1) items NFA" src={`data:image/png;base64,${data.items_nfa.image}`} style={{transform:`scale(${nfaZoom})`, transformOrigin:'top left'}} />
+              </div>
             </div>
           )}
           {data.items_dfa?.image && (
             <div className="mb-4">
-              <h3 className="font-semibold mb-1">DFA de estados LR(1) (colección canónica)</h3>
-              <img alt="LR(1) states DFA" src={`data:image/png;base64,${data.items_dfa.image}`} />
+              <div className="flex items-center gap-2 mb-2">
+                <h3 className="font-semibold">DFA de estados LR(1) (colección canónica)</h3>
+                <div className="ml-auto flex gap-2">
+                  <button className="btn" onClick={()=>setDfaZoom(z=>Math.max(0.25, z-0.25))}>-</button>
+                  <span>{Math.round(dfaZoom*100)}%</span>
+                  <button className="btn" onClick={()=>setDfaZoom(z=>Math.min(3, z+0.25))}>+</button>
+                  <button className="btn" onClick={()=>setDfaZoom(1)}>Reset</button>
+                </div>
+              </div>
+              <div className="border rounded p-2 overflow-auto" style={{maxHeight:'420px'}}>
+                <img alt="LR(1) states DFA" src={`data:image/png;base64,${data.items_dfa.image}`} style={{transform:`scale(${dfaZoom})`, transformOrigin:'top left'}} />
+              </div>
             </div>
           )}
 
@@ -162,4 +185,3 @@ export default function GrammarPanel(){
     </div>
   )
 }
-
