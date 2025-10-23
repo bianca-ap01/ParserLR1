@@ -258,12 +258,12 @@ def lr1_build(req: GrammarRequest):
                 parts = []
                 if left:
                     parts.append(left)
-                parts.append('·')
+                parts.append('.')
                 if right:
                     parts.append(right)
                 body = ' '.join(parts)
                 lines.append(f"{it.lhs} -> {body}, {it.la}")
-            return f"I{idx}\n" + "\n".join(lines)
+            return f"{idx}\n" + "\n".join(lines)
 
         state_label_map = {i: label_state(i) for i in range(len(states))}
         dfa_states = [state_label_map[i] for i in range(len(states))]
