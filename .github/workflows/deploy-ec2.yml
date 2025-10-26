@@ -80,46 +80,79 @@ jobs:
           echo "FRONT_IMG=ghcr.io/${owner,,}/${repo,,}-frontend" >> $GITHUB_ENV
 
       - name: Deploy via SSH (Compose pull+up)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            set -Eeuo pipefail
+    uses: appleboy/ssh-action@v1.0.3
+    with:
+      host: ${{ secrets.EC2_HOST }}
+      username: ${{ secrets.EC2_USER }}
+      key: ${{ secrets.EC2_SSH_KEY }}
+      script: |
+        set -Eeuo pipefail
+  
+        TARGET_DIR="${{ secrets.EC2_PATH }}"
+        # Usa GH_READ_TOKEN si tu repo es privado; si no, clona público
+        if [ -n "${{ secrets.GH_READ_TOKEN }}" ]; then
+          REPO_URL="https://x-access-token:${{ secrets.GH_READ_TOKEN }}@github.com/${{ github.repository }}.git"
+        else
+          REPO_URL="https://github.com/${{ github.repository }}.git"
+        fi
+  
+        mkdir -p "$TARGET_DIR"
+        cd "$TARGET_DIR"
+  
+        # -- Sincroniza el repo de forma robusta --
+        if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+          git fetch --all || true
+          git reset --hard origin/main || true
+        else
+          if [ -z "$(ls -A .)" ]; then
+            # directorio vacío → clonar directo
+            git clone --depth 1 "$REPO_URL" .
+          else
+            # directorio no vacío y no es repo → inicializa y resetea contra origin/main
+            git init
+            git remote remove origin 2>/dev/null || true
+            git remote add origin "$REPO_URL"
+            git fetch --depth 1 origin main
+            git reset --hard origin/main
+          fi
+        fi
+  
+        # Asegura carpeta deploy/
+        mkdir -p deploy
+  
+        # Login GHCR para poder hacer pull
+        echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+  
+        # Deriva nombres de imagen (minúsculas) y fija tags por SHA
+        owner="${GITHUB_REPOSITORY%/*}"
+        repo="${GITHUB_REPOSITORY#*/}"
+        BACK_IMG="ghcr.io/${owner,,}/${repo,,}-backend"
+        FRONT_IMG="ghcr.io/${owner,,}/${repo,,}-frontend"
+  
+        # Escribe .env.images sin espacios iniciales
+        printf "BACKEND_IMAGE=%s:%s\nFRONTEND_IMAGE=%s:%s\n" \
+          "$BACK_IMG" "${GITHUB_SHA}" \
+          "$FRONT_IMG" "${GITHUB_SHA}" \
+          | tee deploy/.env.images >/dev/null
+  
+        # Usa deploy/.env si existe
+        EF=""
+        [ -f deploy/.env ] && EF="--env-file deploy/.env"
+  
+        # Detecta el archivo compose
+        COMPOSE_FILE=""
+        for f in docker-compose.yml docker-compose.yaml compose.yml compose.yaml; do
+          [ -f "$f" ] && COMPOSE_FILE="$f" && break
+        done
+        if [ -z "$COMPOSE_FILE" ]; then
+          echo "❌ No se encontró archivo compose en $TARGET_DIR"
+          ls -la
+          exit 14
+        fi
+  
+        docker compose -f "$COMPOSE_FILE" $EF --env-file deploy/.env.images pull
+        docker compose -f "$COMPOSE_FILE" $EF --env-file deploy/.env.images up -d --remove-orphans
+  
+        docker logout ghcr.io || true
+        docker system prune -f
 
-            REPO_URL="https://github.com/${{ github.repository }}.git"  # si es PRIVADO, ver nota abajo
-            TARGET_DIR="${{ secrets.EC2_PATH }}"
-
-            mkdir -p "$TARGET_DIR"
-            cd "$TARGET_DIR"
-            
-            mkdir -p deploy
-
-            # Login GHCR
-            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
-
-            # Escribir imágenes exactas por SHA (sin espacios)
-            printf "BACKEND_IMAGE=%s:%s\nFRONTEND_IMAGE=%s:%s\n" \
-              "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${GITHUB_REPOSITORY#*/,,}-backend" "${GITHUB_SHA}" \
-              "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${GITHUB_REPOSITORY#*/,,}-frontend" "${GITHUB_SHA}" \
-              | tee deploy/.env.images > /dev/null
-
-
-            # Ejecutar compose apuntando explícitamente al archivo (por si acaso)
-            COMPOSE_FILE="docker-compose.yml"
-            [ -f "$COMPOSE_FILE" ] || COMPOSE_FILE="docker-compose.yaml"
-            [ -f "$COMPOSE_FILE" ] || COMPOSE_FILE="compose.yml"
-            [ -f "$COMPOSE_FILE" ] || COMPOSE_FILE="compose.yaml"
-
-            if [ ! -f "$COMPOSE_FILE" ]; then
-              echo "❌ No se encontró archivo compose en $TARGET_DIR"
-              ls -la
-              exit 14
-            fi
-
-            docker compose -f "$COMPOSE_FILE" $EF --env-file deploy/.env.images pull
-            docker compose -f "$COMPOSE_FILE" $EF --env-file deploy/.env.images up -d --remove-orphans
-
-            docker logout ghcr.io || true
-            docker system prune -f
