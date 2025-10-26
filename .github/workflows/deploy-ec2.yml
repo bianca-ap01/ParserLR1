@@ -93,15 +93,7 @@ jobs:
 
             mkdir -p "$TARGET_DIR"
             cd "$TARGET_DIR"
-
-            if [ -d .git ]; then
-              git fetch --all || true
-              git reset --hard origin/main || true
-            else
-              git clone --depth 1 "$REPO_URL" .   # <-- deja el repo si no existe
-            fi
-
-            # Asegurar carpeta deploy/
+            
             mkdir -p deploy
 
             # Login GHCR
@@ -113,9 +105,6 @@ jobs:
               "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${GITHUB_REPOSITORY#*/,,}-frontend" "${GITHUB_SHA}" \
               | tee deploy/.env.images > /dev/null
 
-            # (Opcional) usar deploy/.env si existe
-            EF=""
-            [ -f deploy/.env ] && EF="--env-file deploy/.env"
 
             # Ejecutar compose apuntando explícitamente al archivo (por si acaso)
             COMPOSE_FILE="docker-compose.yml"
