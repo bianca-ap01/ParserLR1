@@ -26,4 +26,4 @@ COPY lr1_app/backend/ /app/
 EXPOSE 8000
 
 # Producción: varios workers
-CMD uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers --forwarded-allow-ips="*"
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--proxy-headers", "--forwarded-allow-ips=*"]
