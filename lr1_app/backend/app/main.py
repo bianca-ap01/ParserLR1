@@ -27,7 +27,7 @@ from .lex.dfa_subset import nfa_to_dfa
 
 import re
 
-app = FastAPI(title="LR(1) Fullstack API")
+app = FastAPI(title="LR(1) Fullstack API", root_path="/api")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -35,6 +35,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/healthz")
+def ok():
+    return {"ok": True}
 
 _SECTION_RE = re.compile(r"^(START|NONTERMINALS|TERMINALS|PRODUCTIONS|LEXER):\s*(.*)$")
 _LEXER_LINE_RE = re.compile(r"^(.+?):\s*/(.+?)/\s*(skip)?$")
