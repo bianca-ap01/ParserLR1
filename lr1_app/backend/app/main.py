@@ -78,14 +78,14 @@ def load_grammar_from_text(text: str) -> GrammarSpec:
             elif current == 'LEXER':
                 mm = _LEXER_LINE_RE.match(raw.strip())
                 if not mm:
-                    raise ValueError(f"LÃ­nea de lexer invÃ¡lida: {raw}")
+                    raise ValueError(f"Línea de lexer inválida: {raw}")
                 name = mm.group(1).strip()
                 term = name[1:-1] if (name.startswith("'") and name.endswith("'")) or (name.startswith('"') and name.endswith('"')) else name
                 regex = mm.group(2)
                 skip = bool(mm.group(3))
                 spec.lex_rules.append((term, regex, skip))
             else:
-                raise ValueError(f"LÃ­nea fuera de secciÃ³n: {raw}")
+                raise ValueError(f"Línea fuera de sección: {raw}")
 
     # Parseo de producciones
     for ln in prod_lines:
@@ -94,9 +94,9 @@ def load_grammar_from_text(text: str) -> GrammarSpec:
         lhs, rhs = ln.split('->', 1)
         A = lhs.strip()
         alts = [alt.strip() for alt in rhs.split('|')]
-        alts = [("" if a == 'Îµ' or a.casefold() in {'epsilon','eps'} else a) for a in alts]
+        alts = [("" if a == 'ε' or a.casefold() in {'epsilon','eps'} else a) for a in alts]
         for alt in alts:
-            if alt == '' or alt.lower() == 'ï¿½ï¿½' or alt == 'ï¿½ï¿½':
+            if alt == '' or alt.lower() == 'ε' or alt == 'ε':
                 spec.prods.append((A, []))
             else:
                 symbols = [s for s in alt.split() if s]
@@ -112,7 +112,7 @@ def load_grammar_from_text(text: str) -> GrammarSpec:
         rhs_syms = set()
         for (_, rhs) in spec.prods:
             for s in rhs:
-                if s != 'ï¿½ï¿½':
+                if s != 'ε':
                     rhs_syms.add(s)
         spec.terms = sorted([s for s in rhs_syms if s not in nonterms])
 
@@ -168,7 +168,7 @@ def lr1_build(req: GrammarRequest):
 
     def item_label(it: LR1Item) -> str:
         def filt(xs):
-            return [x for x in xs if x not in (G_EPS, 'Îµ', 'eps') and ('ï¿½' not in str(x))]
+            return [x for x in xs if x not in (G_EPS, 'ε', 'eps') and ('ε' not in str(x))]
         rhs = filt(list(it.rhs))
         left = ' '.join(rhs[:it.dot])
         right = ' '.join(rhs[it.dot:])
@@ -206,7 +206,7 @@ def lr1_build(req: GrammarRequest):
             labels[k2] = item_label(it2)
             queue.append(it2)
         # Skip epsilon-labeled advances
-        if str(X) not in (G_EPS, 'Îµ', 'eps'):
+        if str(X) not in (G_EPS, 'ε', 'eps'):
             transitions[k].setdefault(str(X), set()).add(k2)
         # cierre si X es no terminal
         if X in G.nonterminals:
