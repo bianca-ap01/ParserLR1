@@ -263,7 +263,7 @@ def lr1_build(req: GrammarRequest):
             I = states[idx]
             lines = []
             for it in sorted(I, key=lambda z: (z.lhs, z.rhs, z.dot, z.la)):
-                rhs = [x for x in it.rhs if x not in (G_EPS, 'Îµ', 'eps') and ('ï¿½' not in str(x))]
+                rhs = [x for x in it.rhs if x not in (G_EPS, 'ε', 'eps') and ('ε' not in str(x))]
                 left = ' '.join(rhs[:it.dot])
                 right = ' '.join(rhs[it.dot:])
                 parts = []
@@ -404,7 +404,7 @@ def lr1_trace(req: ParseRequest):
             action_str = f'shift {act.value}'
         elif act.kind == 'reduce':
             lhs, rhs = act.value
-            body = 'Îµ' if (len(rhs) == 1 and rhs[0] == G_EPS) else ' '.join(rhs)
+            body = 'ε' if (len(rhs) == 1 and rhs[0] == G_EPS) else ' '.join(rhs)
             action_str = f'reduce {lhs} -> {body}'
         else:
             action_str = 'accept'
