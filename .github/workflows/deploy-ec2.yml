@@ -99,7 +99,7 @@ jobs:
             mkdir -p "$TARGET_DIR"
             cd "$TARGET_DIR"
 
-            # Sincroniza el repo de forma idempotente
+            # Sincroniza repo
             if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
               git fetch --all || true
               git reset --hard origin/main || true
@@ -115,23 +115,38 @@ jobs:
               fi
             fi
 
-            # Asegura carpeta deploy/
+            # Asegura deploy/
             mkdir -p deploy
 
-            # Login GHCR para poder hacer pull
+            # (1) Ambientación de puertos para evitar choque con :80
+            # Si :80 está ocupado (nginx u otro), usamos 8080; si no, usamos 80.
+            FRONT_PORT=80
+            if ss -ltn '( sport = :80 )' | grep -q ':80'; then
+              FRONT_PORT=8080
+            fi
+
+            touch deploy/.env
+            if grep -q '^FRONT_HTTP_PORT=' deploy/.env; then
+              sed -i "s/^FRONT_HTTP_PORT=.*/FRONT_HTTP_PORT=${FRONT_PORT}/" deploy/.env
+            else
+              echo "FRONT_HTTP_PORT=${FRONT_PORT}" >> deploy/.env
+            fi
+            if ! grep -q '^BACK_HTTP_PORT=' deploy/.env; then
+              echo "BACK_HTTP_PORT=8000" >> deploy/.env
+            fi
+
+            # (2) Login GHCR para pull
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
-            # Escribe .env.images (SIN espacios al inicio)
+            # (3) Escribe .env.images
             printf "BACKEND_IMAGE=%s:%s\nFRONTEND_IMAGE=%s:%s\n" \
               "${{ env.BACK_IMG }}" "${{ github.sha }}" \
               "${{ env.FRONT_IMG }}" "${{ github.sha }}" \
               | tee deploy/.env.images > /dev/null
 
-            # Usa deploy/.env si existe
+            # (4) Detecta compose
             EF=""
             [ -f deploy/.env ] && EF="--env-file deploy/.env"
-
-            # Detecta el archivo compose disponible
             COMPOSE_FILE=""
             for f in docker-compose.yml docker-compose.yaml compose.yml compose.yaml; do
               [ -f "$f" ] && COMPOSE_FILE="$f" && break
@@ -142,6 +157,7 @@ jobs:
               exit 14
             fi
 
+            # (5) Pull + Up
             docker compose -f "$COMPOSE_FILE" $EF --env-file deploy/.env.images pull
             docker compose -f "$COMPOSE_FILE" $EF --env-file deploy/.env.images up -d --remove-orphans
 

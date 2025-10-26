@@ -1,27 +1,21 @@
 services:
   backend:
-    # Usa imagen si está definida; si no, tag local "dev"
-    image: ${BACKEND_IMAGE:-parserlr1-backend:dev}
-    healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:8000/healthz || exit 1" ]
-      interval: 15s
-      timeout: 3s
-      retries: 3
-    expose:
-      - "8000"
+    image: ${BACKEND_IMAGE}
+    ports:
+      - "${BACK_HTTP_PORT:-8000}:8000"
+    env_file:
+      - deploy/.env
     networks: [web]
 
   frontend:
-    image: ${FRONTEND_IMAGE:-parserlr1-frontend:dev}
+    image: ${FRONTEND_IMAGE}
     ports:
-      - "80:80"
+      - "${FRONT_HTTP_PORT:-8080}:80"
     depends_on: [backend]
+    env_file:
+      - deploy/.env
     networks: [web]
-    healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1 || exit 1" ]
-      interval: 30s
-      timeout: 3s
-      retries: 3
 
 networks:
-  web: {}
+  web:
+    name: lr1_web
