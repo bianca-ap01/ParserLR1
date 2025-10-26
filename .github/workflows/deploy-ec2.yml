@@ -72,7 +72,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ build-backend, build-frontend ]
     steps:
-      # Deriva ambas rutas de imagen para esta job también
       - name: Derive image names
         run: |
           owner="${GITHUB_REPOSITORY%/*}"
@@ -87,18 +86,34 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            set -e
-            cd ${{ secrets.EC2_PATH }}
+            set -Eeuo pipefail
 
-            # Login GHCR en la EC2 para poder hacer pull
+            # 1) Ir al path de deploy y asegurar repo
+            mkdir -p "${{ secrets.EC2_PATH }}"
+            cd "${{ secrets.EC2_PATH }}"
+            if [ -d .git ]; then
+              git fetch --all || true
+              git reset --hard origin/main || true
+            fi
+
+            # 2) Asegurar carpeta deploy/
+            mkdir -p deploy
+
+            # 3) Login a GHCR (warning del store es normal)
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
-            # Fija imágenes exactas por SHA
-            cat > deploy/.env.images <<EOF
-            BACKEND_IMAGE=${{ env.BACK_IMG }}:${{ github.sha }}
-            FRONTEND_IMAGE=${{ env.FRONT_IMG }}:${{ github.sha }}
-            EOF
+            # 4) Escribir las imágenes exactas por SHA (sin espacios al inicio)
+            printf "BACKEND_IMAGE=%s:%s\nFRONTEND_IMAGE=%s:%s\n" \
+              "${{ env.BACK_IMG }}" "${{ github.sha }}" \
+              "${{ env.FRONT_IMG }}" "${{ github.sha }}" \
+              | tee deploy/.env.images > /dev/null
 
-            docker compose --env-file deploy/.env --env-file deploy/.env.images pull
-            docker compose --env-file deploy/.env --env-file deploy/.env.images up -d --remove-orphans
+            # 5) Usar deploy/.env si existe
+            EF=""
+            [ -f deploy/.env ] && EF="--env-file deploy/.env"
+
+            docker compose $EF --env-file deploy/.env.images pull
+            docker compose $EF --env-file deploy/.env.images up -d --remove-orphans
+
+            docker logout ghcr.io || true
             docker system prune -f
