@@ -1,5 +1,6 @@
 ﻿
-const API = (path: string) => `http://localhost:8000${path}`
+const BASE = (import.meta.env.VITE_API_BASE ?? "/api").replace(/\/+$/,"");
+const API = (path: string) => `${BASE}${path}`;
 
 export async function buildLR1(text: string){
   const r = await fetch(API('/lr1/build'),{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text})})
