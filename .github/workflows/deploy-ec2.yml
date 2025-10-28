@@ -14,63 +14,70 @@ permissions:
   contents: read
   packages: write
 
-env:
-  TARGET_BRANCH: ${{ github.event.inputs.branch || github.ref_name }}
-
 jobs:
   build-backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: { ref: ${{ env.TARGET_BRANCH }} }
+        with:
+          # Si se ejecuta por "Run workflow", usa ese branch; si no, usa el ref del evento (push)
+          ref: ${{ github.event.inputs.branch && github.event.inputs.branch || github.ref_name }}
 
-      - name: Derive image + HEAD_SHA
+      - name: Derive image name
         run: |
           owner="${GITHUB_REPOSITORY%/*}"
           repo="${GITHUB_REPOSITORY#*/}"
           echo "BACK_IMG=ghcr.io/${owner,,}/${repo,,}-backend" >> $GITHUB_ENV
-          echo "HEAD_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          echo "head_sha=$GITHUB_SHA" >> $GITHUB_OUTPUT  # fallback
-      - uses: docker/login-action@v3
+
+      - name: Read HEAD SHA
+        id: sha
+        run: echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - uses: docker/build-push-action@v6
+      - name: Build & Push backend
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/backend.Dockerfile
           push: true
           tags: |
             ${{ env.BACK_IMG }}:latest
-            ${{ env.BACK_IMG }}:${{ env.HEAD_SHA }}
-
-    outputs:
-      head_sha: ${{ env.HEAD_SHA }}
+            ${{ env.BACK_IMG }}:${{ steps.sha.outputs.value }}
 
   build-frontend:
     runs-on: ubuntu-latest
+    outputs:
+      head_sha: ${{ steps.sha.outputs.value }}
     steps:
       - uses: actions/checkout@v4
-        with: { ref: ${{ env.TARGET_BRANCH }} }
+        with:
+          ref: ${{ github.event.inputs.branch && github.event.inputs.branch || github.ref_name }}
 
-      - name: Derive image + HEAD_SHA
-        id: derive
+      - name: Derive image name
         run: |
           owner="${GITHUB_REPOSITORY%/*}"
           repo="${GITHUB_REPOSITORY#*/}"
           echo "FRONT_IMG=ghcr.io/${owner,,}/${repo,,}-frontend" >> $GITHUB_ENV
-          echo "HEAD_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          echo "head_sha=${{ env.HEAD_SHA }}" >> $GITHUB_OUTPUT
 
-      - uses: docker/login-action@v3
+      - name: Read HEAD SHA
+        id: sha
+        run: echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - uses: docker/build-push-action@v6
+      - name: Build & Push frontend (nginx)
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/frontend.Dockerfile
@@ -79,24 +86,22 @@ jobs:
             VITE_API_BASE=/api
           tags: |
             ${{ env.FRONT_IMG }}:latest
-            ${{ env.FRONT_IMG }}:${{ env.HEAD_SHA }}
-
-    outputs:
-      head_sha: ${{ steps.derive.outputs.head_sha }}
+            ${{ env.FRONT_IMG }}:${{ steps.sha.outputs.value }}
 
   deploy-ec2:
     runs-on: ubuntu-latest
     needs: [ build-backend, build-frontend ]
     steps:
-      - name: Derive names + SHA from frontend build
+      - name: Derive names + SHA
         run: |
           owner="${GITHUB_REPOSITORY%/*}"
           repo="${GITHUB_REPOSITORY#*/}"
           echo "BACK_IMG=ghcr.io/${owner,,}/${repo,,}-backend"  >> $GITHUB_ENV
           echo "FRONT_IMG=ghcr.io/${owner,,}/${repo,,}-frontend" >> $GITHUB_ENV
           echo "HEAD_SHA=${{ needs.build-frontend.outputs.head_sha }}" >> $GITHUB_ENV
+          echo "BRANCH=${{ github.event.inputs.branch && github.event.inputs.branch || github.ref_name }}" >> $GITHUB_ENV
 
-      - name: Deploy via SSH
+      - name: Deploy via SSH (Compose pull+up)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -105,7 +110,6 @@ jobs:
           script: |
             set -Eeuo pipefail
             TARGET_DIR="${{ secrets.EC2_PATH }}"
-            BRANCH="${{ env.TARGET_BRANCH }}"
 
             if [ -n "${{ secrets.GH_READ_TOKEN }}" ]; then
               REPO_URL="https://x-access-token:${{ secrets.GH_READ_TOKEN }}@github.com/${{ github.repository }}.git"
@@ -116,21 +120,25 @@ jobs:
             mkdir -p "$TARGET_DIR"
             cd "$TARGET_DIR"
 
+            # Sync exacto a la rama objetivo
             if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-              git fetch --depth 1 origin "$BRANCH"
-              git checkout -B "$BRANCH" "origin/$BRANCH"
+              git fetch --depth 1 origin "${BRANCH}"
+              git checkout -B "${BRANCH}" "origin/${BRANCH}"
             else
-              git clone --depth 1 --branch "$BRANCH" "$REPO_URL" .
+              git clone --depth 1 --branch "${BRANCH}" "$REPO_URL" .
             fi
 
             mkdir -p deploy
 
+            # Puertos
             FRONT_PORT=80
             if ss -ltn '( sport = :80 )' | grep -q ':80'; then FRONT_PORT=8080; fi
             printf "FRONT_HTTP_PORT=%s\nBACK_HTTP_PORT=8000\n" "$FRONT_PORT" > deploy/.env
 
+            # Login GHCR (pull)
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
+            # Imágenes del SHA construido en este run
             printf "BACKEND_IMAGE=%s:%s\nFRONTEND_IMAGE=%s:%s\n" \
               "${{ env.BACK_IMG }}" "${{ env.HEAD_SHA }}" \
               "${{ env.FRONT_IMG }}" "${{ env.HEAD_SHA }}" \
